@@ -1,65 +1,123 @@
-import Image from "next/image";
+import type { Metadata } from "next";
+import Link from "next/link";
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+import { siteFontClassName } from "@/app/fonts";
+import { loadPublishedContent } from "@/modules/publishing/infrastructure/published-content-source";
+
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const published = await loadPublishedContent();
+  if (!published) {
+    return { title: "Portfolio" };
+  }
+
+  const description = published.site.bio.slice(0, 160) || undefined;
+  return {
+    title: published.site.title,
+    ...(description === undefined ? {} : { description }),
+    alternates: { canonical: "/" },
+    openGraph: {
+      title: published.site.title,
+      ...(description === undefined ? {} : { description }),
+      url: "/",
+      type: "website",
+    },
+  };
+}
+
+export default async function HomePage() {
+  const published = await loadPublishedContent();
+
+  if (!published) {
+    return (
+      <main className="flex flex-1 flex-col items-center justify-center px-6 py-24 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Nothing here yet
+        </h1>
+        <p className="mt-2 max-w-md text-sm text-zinc-500">
+          This portfolio has not been published.
+        </p>
       </main>
-    </div>
+    );
+  }
+
+  const { site, manifest } = published;
+
+  return (
+    <main
+      className={`mx-auto flex w-full max-w-5xl flex-1 flex-col gap-12 bg-white px-6 py-16 text-zinc-900 ${siteFontClassName(site.font)}`}
+    >
+      <header className="flex flex-col items-start gap-4">
+        {site.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- R2-hosted asset, served as-is
+          <img
+            src={site.avatarUrl}
+            alt=""
+            className="size-16 rounded-full object-cover"
+          />
+        ) : null}
+        <h1 className="text-3xl font-semibold tracking-tight">{site.title}</h1>
+        {site.bio ? (
+          <p className="max-w-2xl whitespace-pre-line text-base leading-7 text-zinc-600">
+            {site.bio}
+          </p>
+        ) : null}
+        {site.socialLinks.length > 0 ? (
+          <ul className="flex flex-wrap gap-4">
+            {site.socialLinks.map((link) => (
+              <li key={link.url}>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-zinc-700 underline underline-offset-4 hover:text-zinc-950"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </header>
+
+      {manifest.projects.length > 0 ? (
+        <section aria-label="Projects" className="grid gap-8 sm:grid-cols-2">
+          {manifest.projects.map((project) => (
+            <Link
+              key={project.id}
+              href={`/${project.slug}`}
+              className="group flex flex-col gap-3"
+            >
+              {project.coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- R2-hosted asset, no crop (ARD §10)
+                <img
+                  src={project.coverUrl}
+                  alt=""
+                  width={project.coverWidth}
+                  height={project.coverHeight}
+                  loading="lazy"
+                  className="h-auto w-full rounded-lg bg-zinc-100"
+                />
+              ) : (
+                <div className="flex aspect-[4/3] w-full items-center justify-center rounded-lg bg-zinc-100 text-sm text-zinc-400">
+                  {project.title}
+                </div>
+              )}
+              <div>
+                <h2 className="text-base font-medium group-hover:underline group-hover:underline-offset-4">
+                  {project.title}
+                </h2>
+                {project.summary ? (
+                  <p className="mt-1 text-sm text-zinc-600">{project.summary}</p>
+                ) : null}
+              </div>
+            </Link>
+          ))}
+        </section>
+      ) : (
+        <p className="text-sm text-zinc-500">No published projects yet.</p>
+      )}
+    </main>
   );
 }

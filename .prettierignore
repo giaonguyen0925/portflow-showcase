@@ -1,0 +1,12 @@
+.next/
+out/
+build/
+coverage/
+node_modules/
+test-results/
+playwright-report/
+pnpm-lock.yaml
+next-env.d.ts
+
+# Source-of-truth documents are not reformatted.
+ARD-portflow-showcase.md

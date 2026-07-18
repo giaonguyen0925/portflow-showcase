@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Portflow Showcase
 
-## Getting Started
+Website portfolio tối giản cho một designer/team nhỏ: một portfolio, một admin, không database. Toàn bộ JSON và ảnh nằm trên Cloudflare R2, đăng nhập admin qua Cloudflare Access, deploy trên Vercel.
 
-First, run the development server:
+Tài liệu kiến trúc đầy đủ: [ARD-portflow-showcase.md](./ARD-portflow-showcase.md).
+
+## Surface
+
+| Route | Mô tả |
+| --- | --- |
+| `/` | Portfolio public (release đã publish) |
+| `/{projectSlug}` | Chi tiết project đã publish |
+| `/admin` | Trang quản trị duy nhất (Cloudflare Access + JWT verification) |
+| `/api/admin/*` | Write API, bắt buộc `requireAdmin()` |
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env.local   # rồi điền giá trị thật
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local` hiện có sẵn placeholder — cần cập nhật trước khi upload/publish hoạt động:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `ADMIN_EMAIL` — email admin duy nhất được phép.
+- `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUDS` — từ Cloudflare Zero Trust (hai Access applications cho `/admin*` và `/api/admin*`, lấy Audience tags, phân tách bằng dấu phẩy).
+- `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` — API token R2 quyền tối thiểu trên 2 bucket.
+- `R2_PRIVATE_BUCKET`, `R2_PUBLIC_BUCKET`, `R2_PUBLIC_BASE_URL` — bucket private (JSON) + bucket public (ảnh) + custom domain của bucket public.
+- `UPLOAD_TOKEN_SECRET` — chuỗi ngẫu nhiên ≥ 32 ký tự.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Khi dev local, `DEV_ADMIN_BYPASS=true` (đặt trong `.env.development.local`, chỉ được load khi `next dev`) cho phép vào `/admin` không cần Cloudflare Access. **Chỉ hoạt động với `NODE_ENV=development`** — build sẽ fail nếu biến này là `true` trong môi trường build/Preview/Production.
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+pnpm dev          # dev server
+pnpm lint         # eslint
+pnpm typecheck    # tsc --noEmit
+pnpm test         # vitest unit + application tests
+pnpm test:e2e     # playwright (cần dev server / R2 test bucket)
+pnpm build        # production build
+pnpm check        # lint + typecheck + test + build
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Kiến trúc nhanh
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `src/modules/{site,project,asset,publishing,access}` — DDD-lite: `domain` (schema Zod, invariant), `application` (use case + port), `infrastructure` (R2/Cloudflare adapter), `presentation` (React).
+- `src/lib` — env (Zod, server-only), R2 ObjectStore + key builder, API error contract, rate limit, logger.
+- `src/stores` — Zustand: `upload-store` (queue upload, concurrency 3), `admin-ui-store`.
+- Nội dung: draft → (Save, revision check) → R2 private; Publish tạo release snapshot bất biến, ghi `content/current.json` sau cùng — publish fail không ảnh hưởng release đang chạy.
+- Upload: warm-up (presigned PUT 90s + finalize token) → browser PUT thẳng lên R2 staging → complete (verify checksum/size, copy sang public bucket, idempotent).
 
-## Deploy on Vercel
+## Deploy (tóm tắt — chi tiết xem ARD §27)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. **R2**: tạo 2 bucket (private/public), API token quyền tối thiểu, gắn custom domain cho bucket public, cấu hình CORS cho origin app (PUT + header `content-type`, `x-amz-checksum-sha256`), lifecycle rule tự xóa `uploads/staging/*`.
+2. **Cloudflare Access**: 2 self-hosted applications (`/admin*`, `/api/admin*`), policy allow đúng `ADMIN_EMAIL`, lấy cả 2 Audience tags bỏ vào `CF_ACCESS_AUDS`.
+3. **Vercel**: import repo, đặt env riêng cho Preview/Production (không bật `DEV_ADMIN_BYPASS`), gắn production domain qua Cloudflare proxy.
+4. Kiểm tra: vào `/admin` qua domain Cloudflare (login OTP/IdP); gọi thẳng `*.vercel.app/api/admin/content` phải trả `401`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Troubleshooting
+
+- **401 UNAUTHENTICATED trên `/admin`** — request không đi qua Cloudflare proxy hoặc thiếu header `Cf-Access-Jwt-Assertion`; kiểm tra DNS proxy (đám mây cam) và Access application path.
+- **403 FORBIDDEN** — đăng nhập bằng email khác `ADMIN_EMAIL`.
+- **Upload fail ngay khi PUT** — kiểm tra CORS của bucket private (origin app, method PUT, headers `content-type`, `x-amz-checksum-sha256`).
+- **`STORAGE_UNAVAILABLE`** — credential R2 sai hoặc bucket không tồn tại; xem server logs (JSON, có `requestId`).
+- **Build fail `DEV_ADMIN_BYPASS`** — biến này đang `true` ở môi trường không phải development; xóa khỏi Vercel env.
+- **409 REVISION_CONFLICT khi Save** — nội dung đã bị sửa ở tab khác; reload trang admin.
