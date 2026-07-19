@@ -33,7 +33,13 @@ export const privateKeys = {
     `archive/projects/${safeSegment(projectId)}/${safeSegment(timestamp)}.json`,
 } as const;
 
+const ASSET_EXTENSION = /^(webp|mp4|webm)$/;
+
 export const publicKeys = {
-  assetOriginal: (assetId: string) =>
-    `assets/${safeSegment(assetId)}/original.webp`,
+  assetOriginal: (assetId: string, extension: string = "webp") => {
+    if (!ASSET_EXTENSION.test(extension)) {
+      throw new Error(`Unsafe asset extension: ${JSON.stringify(extension)}`);
+    }
+    return `assets/${safeSegment(assetId)}/original.${extension}`;
+  },
 } as const;

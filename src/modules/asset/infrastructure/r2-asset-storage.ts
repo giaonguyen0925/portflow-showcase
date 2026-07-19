@@ -3,7 +3,6 @@ import type {
   AssetStorage,
   PresignStagingOptions,
 } from "@/modules/asset/application/ports";
-import { ASSET_CONTENT_TYPE } from "@/modules/asset/domain/asset";
 
 const PUBLIC_ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable";
 
@@ -24,12 +23,16 @@ export function createR2AssetStorage(store: ObjectStore): AssetStorage {
       return store.head("public", assetKey);
     },
 
-    async finalize(stagingKey: string, assetKey: string): Promise<void> {
+    async finalize(
+      stagingKey: string,
+      assetKey: string,
+      contentType: string,
+    ): Promise<void> {
       await store.copy(
         { bucket: "private", key: stagingKey },
         { bucket: "public", key: assetKey },
         {
-          contentType: ASSET_CONTENT_TYPE,
+          contentType,
           cacheControl: PUBLIC_ASSET_CACHE_CONTROL,
         },
       );

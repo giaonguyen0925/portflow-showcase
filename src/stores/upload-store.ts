@@ -16,6 +16,7 @@ export type UploadItem = {
   scope: string;
   fileName: string;
   previewUrl: string;
+  previewKind: "image" | "video";
   status: UploadStatus;
   progress: number;
   error?: string | undefined;

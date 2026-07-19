@@ -52,7 +52,7 @@ describe("warmUpUpload", () => {
     expect(result.uploadUrlExpiresInSeconds).toBeLessThanOrEqual(90);
   });
 
-  it("rejects oversized files", async () => {
+  it("rejects oversized image files", async () => {
     const { storage } = setup();
 
     await expect(
@@ -63,7 +63,37 @@ describe("warmUpUpload", () => {
     ).rejects.toThrow();
   });
 
-  it("rejects oversized dimensions and non-webp uploads", async () => {
+  it("accepts video uploads up to 25 MiB", async () => {
+    const { storage } = setup();
+
+    const result = await warmUpUpload(
+      { storage, uploadTokenSecret: SECRET },
+      validWarmUpInput({
+        fileName: "clip.mp4",
+        contentType: "video/mp4",
+        size: 25 * 1024 * 1024,
+      }),
+    );
+
+    expect(result.uploadId).toMatch(/^upload_/);
+  });
+
+  it("rejects oversized video files", async () => {
+    const { storage } = setup();
+
+    await expect(
+      warmUpUpload(
+        { storage, uploadTokenSecret: SECRET },
+        validWarmUpInput({
+          fileName: "clip.mp4",
+          contentType: "video/mp4",
+          size: 26 * 1024 * 1024,
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("rejects oversized dimensions and non-webp image uploads", async () => {
     const { storage } = setup();
 
     await expect(
@@ -82,9 +112,21 @@ describe("warmUpUpload", () => {
 });
 
 describe("completeUpload", () => {
-  async function warmAndStage(sizeOnDisk?: number, checksumOnDisk?: string) {
+  async function warmAndStage(
+    sizeOnDisk?: number,
+    checksumOnDisk?: string,
+    contentType: "image/webp" | "video/mp4" | "video/webm" = "image/webp",
+  ) {
     const { store, storage } = setup();
-    const input = validWarmUpInput();
+    const input = validWarmUpInput(
+      contentType === "image/webp"
+        ? {}
+        : {
+            fileName: contentType === "video/mp4" ? "clip.mp4" : "clip.webm",
+            contentType,
+            size: 2_000_000,
+          },
+    );
     const warm = await warmUpUpload(
       { storage, uploadTokenSecret: SECRET },
       input,
@@ -92,7 +134,7 @@ describe("completeUpload", () => {
 
     store.setObject("private", `uploads/staging/${warm.uploadId}`, {
       size: sizeOnDisk ?? (input.size as number),
-      contentType: "image/webp",
+      contentType,
       checksumSha256: checksumOnDisk ?? (input.checksum as string),
     });
 
@@ -116,6 +158,25 @@ describe("completeUpload", () => {
     );
     expect(store.has("private", `uploads/staging/${warm.uploadId}`)).toBe(
       false,
+    );
+  });
+
+  it("finalizes a staged video upload with the mp4 key", async () => {
+    const { store, storage, warm } = await warmAndStage(
+      undefined,
+      undefined,
+      "video/mp4",
+    );
+
+    const asset = await completeUpload(
+      { storage, uploadTokenSecret: SECRET, assetBaseUrl: TEST_ASSET_BASE_URL },
+      { uploadId: warm.uploadId, finalizeToken: warm.finalizeToken },
+    );
+
+    expect(asset.contentType).toBe("video/mp4");
+    expect(asset.key).toBe(`assets/${warm.assetId}/original.mp4`);
+    expect(store.has("public", `assets/${warm.assetId}/original.mp4`)).toBe(
+      true,
     );
   });
 

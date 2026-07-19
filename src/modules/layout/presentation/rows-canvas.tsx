@@ -15,7 +15,7 @@ import {
   updateBlockInColumn,
 } from "@/modules/layout/application/layout-mutations";
 import {
-  createImageBlockFromAsset,
+  createMediaBlockFromAsset,
   createRichTextBlock,
 } from "@/modules/layout/domain/block-factories";
 import type { RowBlock } from "@/modules/layout/domain/blocks";
@@ -37,7 +37,7 @@ export function RowsCanvas({
   renderBlockEditor?: RenderBlockEditor | undefined;
 }) {
   /**
-   * Multi-file "Upload images" for a whole row: fills this row's empty
+   * Multi-file "Upload media" for a whole row: fills this row's empty
    * columns left to right; once full, each further completed upload creates
    * its own new row with the same column count. Uploads complete out of
    * order, so with more overflow files than one row can hold you may get
@@ -47,7 +47,7 @@ export function RowsCanvas({
   function handleRowUploadAsset(rowId: string, asset: Asset) {
     const index = rows.findIndex((r) => r.id === rowId);
     if (index === -1) return;
-    onRowsChange(placeBlockInRow(rows, index, createImageBlockFromAsset(asset)));
+    onRowsChange(placeBlockInRow(rows, index, createMediaBlockFromAsset(asset)));
   }
 
   if (rows.length === 0) {
@@ -89,7 +89,7 @@ export function RowsCanvas({
             }
             onUploadToColumn={(columnId, asset) =>
               onRowsChange(
-                addBlockToColumn(rows, index, columnId, createImageBlockFromAsset(asset)),
+                addBlockToColumn(rows, index, columnId, createMediaBlockFromAsset(asset)),
               )
             }
             onUpdateRichText={(columnId, blockId, content) =>

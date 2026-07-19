@@ -69,6 +69,20 @@ function BlockView({
       />
     );
   }
+  if (block.type === "video") {
+    return (
+      <video
+        src={block.asset.url}
+        width={block.asset.width}
+        height={block.asset.height}
+        controls
+        playsInline
+        preload="metadata"
+        className="h-auto w-full"
+        aria-label={block.asset.alt || undefined}
+      />
+    );
+  }
   if (block.type === "rich-text") {
     return <RichTextView content={block.content} />;
   }

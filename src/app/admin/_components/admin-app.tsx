@@ -120,9 +120,13 @@ export function AdminApp({
   }
 
   if (selectedProjectId) {
+    const indexEntry = content?.projectIndex.projects.find(
+      (p) => p.id === selectedProjectId,
+    );
     return (
       <ProjectCanvas
         projectId={selectedProjectId}
+        indexStatus={indexEntry?.status}
         onBack={() => selectProject(null)}
         onChanged={() => void refresh()}
       />

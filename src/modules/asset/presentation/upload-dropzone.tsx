@@ -20,15 +20,26 @@ const ACTIVE_STATUSES = new Set([
   "finalizing",
 ]);
 
+const DEFAULT_ACCEPT = "image/*,video/mp4,video/webm";
+
 function UploadRow({ item }: { item: UploadItem }) {
   return (
     <li className="flex items-center gap-3 rounded-lg border border-border p-2 text-sm">
-      {/* eslint-disable-next-line @next/next/no-img-element -- local blob preview */}
-      <img
-        src={item.previewUrl}
-        alt=""
-        className="size-10 rounded-md bg-muted object-cover"
-      />
+      {item.previewKind === "video" ? (
+        <video
+          src={item.previewUrl}
+          muted
+          playsInline
+          className="size-10 rounded-md bg-muted object-cover"
+        />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element -- local blob preview
+        <img
+          src={item.previewUrl}
+          alt=""
+          className="size-10 rounded-md bg-muted object-cover"
+        />
+      )}
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">{item.fileName}</p>
         {item.status === "uploading" ? (
@@ -71,12 +82,15 @@ function UploadRow({ item }: { item: UploadItem }) {
 export function UploadDropzone({
   scope,
   multiple = true,
-  label = "Add images",
+  label = "Add media",
+  accept = DEFAULT_ACCEPT,
   onAsset,
 }: {
   scope: string;
   multiple?: boolean;
   label?: string;
+  /** Defaults to images + MP4/WebM. Avatar uploads should pass `image/*`. */
+  accept?: string;
   onAsset: (asset: Asset) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -93,7 +107,7 @@ export function UploadDropzone({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept={accept}
         multiple={multiple}
         className="hidden"
         onChange={(event) => {

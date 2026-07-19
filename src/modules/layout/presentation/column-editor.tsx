@@ -37,7 +37,7 @@ export function ColumnEditor({
         <UploadDropzone
           scope={`column:${scopeId}:${rowId}:${column.id}`}
           multiple={false}
-          label="Upload image"
+          label="Upload image or video"
           onAsset={onUpload}
         />
         <Button type="button" variant="ghost" size="xs" onClick={onAddText}>
@@ -88,6 +88,19 @@ function BlockEditor({
         alt={block.asset.alt}
         width={block.asset.width}
         height={block.asset.height}
+        className="h-auto w-full rounded-md bg-muted"
+      />
+    );
+  }
+  if (block.type === "video") {
+    return (
+      <video
+        src={block.asset.url}
+        width={block.asset.width}
+        height={block.asset.height}
+        controls
+        playsInline
+        preload="metadata"
         className="h-auto w-full rounded-md bg-muted"
       />
     );

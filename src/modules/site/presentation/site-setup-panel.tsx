@@ -87,8 +87,14 @@ export function SiteSetupPanel({
             <UploadDropzone
               scope="site-avatar"
               multiple={false}
+              accept="image/*"
               label="Upload avatar"
-              onAsset={(asset) => onAvatarChange(asset.id, asset.url)}
+              onAsset={(asset) => {
+                if (asset.contentType !== "image/webp") {
+                  return;
+                }
+                onAvatarChange(asset.id, asset.url);
+              }}
             />
           </div>
         </div>

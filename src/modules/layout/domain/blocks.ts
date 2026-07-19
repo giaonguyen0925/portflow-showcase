@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { assetSchema, type Asset } from "@/modules/asset/domain/asset";
+import {
+  imageAssetSchema,
+  videoAssetSchema,
+  type Asset,
+} from "@/modules/asset/domain/asset";
 import { richTextDocumentSchema } from "@/modules/rich-text/domain/rich-text-document";
 
 export const MIN_COLUMNS = 1;
@@ -8,8 +12,9 @@ export const MAX_COLUMNS = 3;
 export const MAX_ROWS_PER_PROJECT = 200;
 export const MAX_BLOCKS_PER_COLUMN = 20;
 /** Reuses the ARD §18 "Asset/project: tối đa 100" limit, now counted across
- * every image block in the row tree instead of a flat assets array. */
+ * every image/video block in the row tree instead of a flat assets array. */
 export const MAX_IMAGE_BLOCKS_PER_PROJECT = 100;
+export const MAX_MEDIA_BLOCKS_PER_PROJECT = MAX_IMAGE_BLOCKS_PER_PROJECT;
 
 const rowIdSchema = z.string().regex(/^row_[a-f0-9]{32}$/, {
   message: "Invalid row id",
@@ -24,10 +29,18 @@ const blockIdSchema = z.string().regex(/^block_[a-f0-9]{32}$/, {
 export const imageBlockSchema = z.object({
   id: blockIdSchema,
   type: z.literal("image"),
-  asset: assetSchema,
+  asset: imageAssetSchema,
 });
 
 export type ImageBlock = z.infer<typeof imageBlockSchema>;
+
+export const videoBlockSchema = z.object({
+  id: blockIdSchema,
+  type: z.literal("video"),
+  asset: videoAssetSchema,
+});
+
+export type VideoBlock = z.infer<typeof videoBlockSchema>;
 
 export const richTextBlockSchema = z.object({
   id: blockIdSchema,
@@ -71,6 +84,7 @@ export const SYSTEM_BLOCK_TYPES = new Set(["profile", "project-grid"]);
 /** Blocks any document may contain. */
 export const contentBlockSchema = z.discriminatedUnion("type", [
   imageBlockSchema,
+  videoBlockSchema,
   richTextBlockSchema,
 ]);
 
@@ -79,6 +93,7 @@ export type ContentBlock = z.infer<typeof contentBlockSchema>;
 /** Blocks the site (root page) document may contain. */
 export const siteBlockSchema = z.discriminatedUnion("type", [
   imageBlockSchema,
+  videoBlockSchema,
   richTextBlockSchema,
   profileBlockSchema,
   projectGridBlockSchema,
@@ -126,6 +141,10 @@ export function isImageBlock(block: Block): block is ImageBlock {
   return block.type === "image";
 }
 
+export function isVideoBlock(block: Block): block is VideoBlock {
+  return block.type === "video";
+}
+
 export function isSystemBlock(block: Block): boolean {
   return SYSTEM_BLOCK_TYPES.has(block.type);
 }
@@ -144,8 +163,26 @@ export function collectImageAssets(rows: RowBlock[]): Asset[] {
   return assets;
 }
 
+export function collectMediaAssets(rows: RowBlock[]): Asset[] {
+  const assets: Asset[] = [];
+  for (const row of rows) {
+    for (const column of row.columns) {
+      for (const block of column.blocks) {
+        if (isImageBlock(block) || isVideoBlock(block)) {
+          assets.push(block.asset);
+        }
+      }
+    }
+  }
+  return assets;
+}
+
 export function countImageBlocks(rows: RowBlock[]): number {
   return collectImageAssets(rows).length;
+}
+
+export function countMediaBlocks(rows: RowBlock[]): number {
+  return collectMediaAssets(rows).length;
 }
 
 /** First image encountered in reading order: row, then column, then block. */

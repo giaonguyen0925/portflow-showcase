@@ -23,6 +23,7 @@ const projectIdSchema = z
   .regex(/^project_[a-f0-9]{32}$/, { message: "Invalid project id" });
 
 export const PROJECT_STATUSES = ["draft", "published", "archived"] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
 /**
  * Schema v3: rows carry rich-text blocks and the document has a page theme

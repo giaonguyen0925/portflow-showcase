@@ -15,5 +15,9 @@ export interface AssetStorage {
   headStaging(stagingKey: string): Promise<ObjectMeta | null>;
   headPublic(assetKey: string): Promise<ObjectMeta | null>;
   /** Copies staging object to its immutable public key, then removes staging. */
-  finalize(stagingKey: string, assetKey: string): Promise<void>;
+  finalize(
+    stagingKey: string,
+    assetKey: string,
+    contentType: string,
+  ): Promise<void>;
 }

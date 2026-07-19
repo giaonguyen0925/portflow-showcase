@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { FullscreenLoading } from "@/components/fullscreen-loading";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
@@ -18,8 +19,11 @@ import { RowsView } from "@/modules/layout/presentation/rows-view";
 import { ThemeControls } from "@/modules/layout/presentation/theme-controls";
 import { useAutosaveFeedback } from "@/modules/layout/presentation/use-autosave-feedback";
 import { useDocumentAutosave } from "@/modules/layout/presentation/use-document-autosave";
-import { MAX_SUMMARY_LENGTH } from "@/modules/project/domain/project-document";
-import type { ProjectDocument } from "@/modules/project/domain/project-document";
+import {
+  MAX_SUMMARY_LENGTH,
+  type ProjectDocument,
+  type ProjectStatus,
+} from "@/modules/project/domain/project-document";
 import { MAX_PROJECT_NAME_LENGTH } from "@/modules/project/domain/project-name";
 
 type EditableState = {
@@ -56,10 +60,13 @@ function mapSaveError(error: unknown): string {
 
 export function ProjectCanvas({
   projectId,
+  indexStatus,
   onBack,
   onChanged,
 }: {
   projectId: string;
+  /** Live index status (draft/published/archived); separate from draft.json. */
+  indexStatus?: ProjectStatus | undefined;
   onBack: () => void;
   onChanged: () => void;
 }) {
@@ -153,12 +160,22 @@ export function ProjectCanvas({
   }
 
   async function handlePublish() {
+    if (!state) return;
     setIsPublishing(true);
     try {
+      // Force-save the visible canvas so titled projects are in draft.json
+      // before the release snapshot is built.
+      await autosave.flush(state);
       const result = await apiFetch<PublishResponse>("/api/admin/publish", {
         method: "POST",
       });
-      toast.success(`Published (${result.projectCount} projects live).`);
+      if (result.projectCount === 0) {
+        toast.warning(
+          "Published site only — no titled projects yet. Save a title on each project, then publish again.",
+        );
+      } else {
+        toast.success(`Published (${result.projectCount} projects live).`);
+      }
       onChanged();
     } catch (error) {
       toast.error(
@@ -208,6 +225,13 @@ export function ProjectCanvas({
         />
         {project.slug ? (
           <span className="text-xs text-muted-foreground">/{project.slug}</span>
+        ) : null}
+        {indexStatus ? (
+          <Badge
+            variant={indexStatus === "published" ? "default" : "secondary"}
+          >
+            {indexStatus}
+          </Badge>
         ) : null}
         <div className="ml-auto flex items-center gap-2">
           <ThemeControls

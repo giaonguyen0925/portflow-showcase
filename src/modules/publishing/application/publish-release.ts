@@ -4,7 +4,7 @@ import { logServerEvent } from "@/lib/observability/logger";
 import { publicAssetUrl } from "@/modules/asset/domain/asset";
 import { assertAssetsBelongToPublicBase } from "@/modules/project/application/save-project";
 import type { ProjectRepository } from "@/modules/project/application/ports";
-import { collectImageAssets, firstImageBlock } from "@/modules/layout/domain/blocks";
+import { collectMediaAssets, firstImageBlock } from "@/modules/layout/domain/blocks";
 import {
   createInitialProjectIndex,
   parseProjectDocument,
@@ -61,9 +61,11 @@ function toCard(project: TitledProjectDocument): ReleaseProjectCard {
  * once every snapshot object has been written. Any failure before that final
  * write leaves the previous release fully intact (ARD §6.7).
  *
- * Untitled drafts (no slug yet) are silently skipped — they simply aren't
- * ready to publish. Projects with `isVisible: false` still get their own
- * `/{slug}` release page written, but are left out of the home manifest.
+ * Untitled drafts (no title/slug on the draft document) are silently skipped.
+ * The draft is the source of truth — index.slug can lag after concurrent
+ * saves, so we never require the index entry to already carry a slug.
+ * Projects with `isVisible: false` still get their own `/{slug}` release
+ * page written, but are left out of the home manifest.
  */
 export async function publishRelease(deps: {
   sites: SiteRepository;
@@ -83,14 +85,11 @@ export async function publishRelease(deps: {
   const index =
     (await deps.projects.readIndex()) ?? createInitialProjectIndex();
 
-  const publishableEntries = index.projects.filter(
-    (p): p is ProjectIndexEntry & { slug: string } =>
-      p.status !== "archived" && p.slug !== undefined,
-  );
+  const candidates = index.projects.filter((p) => p.status !== "archived");
 
   const pairs: Array<{ entry: ProjectIndexEntry; document: TitledProjectDocument }> =
     [];
-  for (const entry of publishableEntries) {
+  for (const entry of candidates) {
     const draft = await deps.projects.readDraft(entry.id);
     if (!draft) {
       throw new AppError(
@@ -101,13 +100,10 @@ export async function publishRelease(deps: {
     }
     const parsed = parseProjectDocument(draft);
     if (!isTitled(parsed)) {
-      throw new AppError(
-        "VALIDATION_ERROR",
-        "Project index has a slug but the draft has none",
-        { projectId: entry.id },
-      );
+      // Untitled canvas drafts are not ready for a public URL yet.
+      continue;
     }
-    assertAssetsBelongToPublicBase(collectImageAssets(parsed.rows), deps.assetBaseUrl);
+    assertAssetsBelongToPublicBase(collectMediaAssets(parsed.rows), deps.assetBaseUrl);
     pairs.push({ entry, document: parsed });
   }
 
@@ -184,18 +180,13 @@ export async function publishRelease(deps: {
     publishedAt,
   });
 
-  // Best-effort bookkeeping: the release is already live. Only entries
-  // actually included in this release flip to "published"; untitled drafts
-  // and archived entries are untouched.
+  // Best-effort: mark included projects published and repair index title/slug
+  // from the draft (index.slug can lag after concurrent autosaves).
+  const publishedById = new Map(
+    pairs.map(({ entry, document }) => [entry.id, document] as const),
+  );
   try {
-    const publishedIds = new Set(pairs.map(({ entry }) => entry.id));
-    await deps.projects.writeIndex({
-      ...index,
-      revision: index.revision + 1,
-      projects: index.projects.map((p) =>
-        publishedIds.has(p.id) ? { ...p, status: "published" } : p,
-      ),
-    });
+    await syncPublishedIndexEntries(deps.projects, publishedById);
   } catch {
     logServerEvent("warn", "publish.index-status-update-failed", {
       releaseId,
@@ -203,4 +194,54 @@ export async function publishRelease(deps: {
   }
 
   return { releaseId, publishedAt, projectCount: pairs.length };
+}
+
+const INDEX_STATUS_ATTEMPTS = 3;
+
+async function syncPublishedIndexEntries(
+  projects: ProjectRepository,
+  publishedById: Map<string, TitledProjectDocument>,
+): Promise<void> {
+  if (publishedById.size === 0) {
+    return;
+  }
+
+  for (let attempt = 0; attempt < INDEX_STATUS_ATTEMPTS; attempt += 1) {
+    const latest =
+      (await projects.readIndex()) ?? createInitialProjectIndex();
+    await projects.writeIndex({
+      ...latest,
+      revision: latest.revision + 1,
+      projects: latest.projects.map((p) => {
+        const document = publishedById.get(p.id);
+        if (!document) {
+          return p;
+        }
+        return {
+          ...p,
+          title: document.title,
+          ...(document.normalizedTitle === undefined
+            ? {}
+            : { normalizedTitle: document.normalizedTitle }),
+          slug: document.slug,
+          summary: document.summary,
+          status: "published" as const,
+        };
+      }),
+    });
+
+    const verify = await projects.readIndex();
+    const allMarked = [...publishedById.keys()].every((id) => {
+      const entry = verify?.projects.find((p) => p.id === id);
+      return (
+        entry?.status === "published" &&
+        entry.slug === publishedById.get(id)?.slug
+      );
+    });
+    if (allMarked) {
+      return;
+    }
+  }
+
+  throw new Error("Could not persist published status on the project index");
 }

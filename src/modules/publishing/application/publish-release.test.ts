@@ -144,6 +144,31 @@ describe("publishRelease", () => {
     );
   });
 
+  it("publishes titled drafts even when the index entry is missing a slug", async () => {
+    const { deps } = setup();
+    const project = await seedContent(deps);
+
+    const index = await deps.projects.readIndex();
+    if (!index) throw new Error("expected index");
+    // Simulate a lost index slug update (concurrent autosave race).
+    await deps.projects.writeIndex({
+      ...index,
+      revision: index.revision + 1,
+      projects: index.projects.map((p) => {
+        if (p.id !== project.id) return p;
+        const { slug: _slug, title: _title, normalizedTitle: _n, ...rest } = p;
+        return rest;
+      }),
+    });
+
+    const result = await publishRelease(deps);
+
+    expect(result.projectCount).toBe(1);
+    const repaired = await deps.projects.readIndex();
+    expect(repaired?.projects.at(0)?.slug).toBe("brand-identity");
+    expect(repaired?.projects.at(0)?.status).toBe("published");
+  });
+
   it("orders manifest cards by portfolio order", async () => {
     const { deps } = setup();
     await seedContent(deps); // "Brand Identity"

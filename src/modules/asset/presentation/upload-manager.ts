@@ -1,10 +1,17 @@
 "use client";
 
 import { apiFetch } from "@/lib/api/client";
-import type { Asset } from "@/modules/asset/domain/asset";
+import type {
+  Asset,
+  AssetContentType,
+  VideoContentType,
+} from "@/modules/asset/domain/asset";
 import {
-  MAX_FILE_SIZE_BYTES,
+  IMAGE_CONTENT_TYPE,
+  isVideoContentType,
   MAX_IMAGE_DIMENSION,
+  MAX_IMAGE_FILE_SIZE_BYTES,
+  MAX_VIDEO_FILE_SIZE_BYTES,
 } from "@/modules/asset/domain/asset";
 import type { WarmUpResponse } from "@/modules/asset/application/warm-up-upload";
 import { useUploadStore, type UploadItem } from "@/stores/upload-store";
@@ -45,6 +52,7 @@ export function enqueueUploads(
       scope,
       fileName: file.name,
       previewUrl: URL.createObjectURL(file),
+      previewKind: file.type.startsWith("video/") ? "video" : "image",
       status: "queued",
       progress: 0,
     });
@@ -107,7 +115,7 @@ async function runUpload(id: string): Promise<void> {
 
   try {
     update({ status: "preprocessing" });
-    const processed = await preprocessImage(task.file);
+    const processed = await preprocessFile(task.file);
     throwIfCancelled(task);
 
     const checksum = await sha256Base64(processed.blob);
@@ -118,7 +126,7 @@ async function runUpload(id: string): Promise<void> {
       method: "POST",
       body: JSON.stringify({
         fileName: task.file.name,
-        contentType: "image/webp",
+        contentType: processed.contentType,
         size: processed.blob.size,
         checksum,
         width: processed.width,
@@ -128,8 +136,12 @@ async function runUpload(id: string): Promise<void> {
     throwIfCancelled(task);
 
     update({ status: "uploading", progress: 0 });
-    await putWithProgress(task, warm.uploadUrl, processed.blob, (p) =>
-      update({ progress: p }),
+    await putWithProgress(
+      task,
+      warm.uploadUrl,
+      processed.blob,
+      processed.contentType,
+      (p) => update({ progress: p }),
     );
 
     update({ status: "finalizing", progress: 100 });
@@ -167,14 +179,29 @@ function throwIfCancelled(task: UploadTask): void {
   }
 }
 
+type ProcessedUpload = {
+  blob: Blob;
+  width: number;
+  height: number;
+  contentType: AssetContentType;
+};
+
+async function preprocessFile(file: File): Promise<ProcessedUpload> {
+  if (file.type.startsWith("image/")) {
+    const image = await preprocessImage(file);
+    return { ...image, contentType: IMAGE_CONTENT_TYPE };
+  }
+  if (isVideoContentType(file.type)) {
+    return preprocessVideo(file, file.type);
+  }
+  throw new Error("Only image and video (MP4/WebM) files can be uploaded");
+}
+
 async function preprocessImage(
   file: File,
 ): Promise<{ blob: Blob; width: number; height: number }> {
-  if (file.size > MAX_FILE_SIZE_BYTES) {
+  if (file.size > MAX_IMAGE_FILE_SIZE_BYTES) {
     throw new Error("File is larger than 20 MiB");
-  }
-  if (!file.type.startsWith("image/")) {
-    throw new Error("Only image files can be uploaded");
   }
 
   const bitmap = await createImageBitmap(file);
@@ -209,11 +236,51 @@ async function preprocessImage(
   if (!blob || blob.type !== "image/webp") {
     throw new Error("This browser cannot convert images to WebP");
   }
-  if (blob.size > MAX_FILE_SIZE_BYTES) {
+  if (blob.size > MAX_IMAGE_FILE_SIZE_BYTES) {
     throw new Error("Converted image is larger than 20 MiB");
   }
 
   return { blob, width, height };
+}
+
+async function preprocessVideo(
+  file: File,
+  contentType: VideoContentType,
+): Promise<ProcessedUpload> {
+  if (file.size > MAX_VIDEO_FILE_SIZE_BYTES) {
+    throw new Error("Video is larger than 25 MiB");
+  }
+
+  const { width, height } = await readVideoDimensions(file);
+  if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+    throw new Error("Video exceeds the 12,000px dimension limit");
+  }
+
+  return { blob: file, width, height, contentType };
+}
+
+function readVideoDimensions(
+  file: File,
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      const { videoWidth: width, videoHeight: height } = video;
+      URL.revokeObjectURL(url);
+      if (!width || !height) {
+        reject(new Error("Could not read video dimensions"));
+        return;
+      }
+      resolve({ width, height });
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not load video metadata"));
+    };
+    video.src = url;
+  });
 }
 
 async function sha256Base64(blob: Blob): Promise<string> {
@@ -232,6 +299,7 @@ function putWithProgress(
   task: UploadTask,
   url: string,
   blob: Blob,
+  contentType: AssetContentType,
   onProgress: (percent: number) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -245,7 +313,7 @@ function putWithProgress(
     // Resending it as an `x-amz-*` header here is unsigned and makes R2
     // reject the request with SignatureDoesNotMatch — verified against the
     // real bucket, do not re-add it.
-    xhr.setRequestHeader("Content-Type", "image/webp");
+    xhr.setRequestHeader("Content-Type", contentType);
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {

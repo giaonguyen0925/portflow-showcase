@@ -41,19 +41,23 @@ export async function completeUpload(
     );
   }
 
-  const assetKey = publicAssetKey(payload.assetId);
-  const asset: Asset = {
+  const assetKey = publicAssetKey(payload.assetId, payload.contentType);
+  const asset = {
     id: payload.assetId,
     key: assetKey,
-    url: publicAssetUrl(deps.assetBaseUrl, payload.assetId),
+    url: publicAssetUrl(
+      deps.assetBaseUrl,
+      payload.assetId,
+      payload.contentType,
+    ),
     width: payload.width,
     height: payload.height,
-    contentType: "image/webp",
+    contentType: payload.contentType,
     size: payload.size,
     checksum: payload.checksum,
     alt: "",
     order: 0,
-  };
+  } as Asset;
 
   const alreadyFinalized = await deps.storage.headPublic(assetKey);
   if (alreadyFinalized) {
@@ -83,7 +87,11 @@ export async function completeUpload(
     throw new AppError("INVALID_ASSET", "Uploaded checksum does not match");
   }
 
-  await deps.storage.finalize(payload.stagingKey, assetKey);
+  await deps.storage.finalize(
+    payload.stagingKey,
+    assetKey,
+    payload.contentType,
+  );
 
   return asset;
 }

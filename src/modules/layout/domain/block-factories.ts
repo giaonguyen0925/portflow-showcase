@@ -1,5 +1,10 @@
 import { createBlockId, createColumnId, createRowId } from "@/lib/ids/ids";
-import type { Asset } from "@/modules/asset/domain/asset";
+import {
+  isVideoAsset,
+  type Asset,
+  type ImageAsset,
+  type VideoAsset,
+} from "@/modules/asset/domain/asset";
 import { createEmptyRichTextDocument } from "@/modules/rich-text/domain/rich-text-document";
 
 import {
@@ -11,6 +16,7 @@ import {
   type ProjectGridBlock,
   type RichTextBlock,
   type RowBlock,
+  type VideoBlock,
 } from "./blocks";
 
 export function createEmptyColumn(): ColumnBlock {
@@ -25,8 +31,22 @@ export function createEmptyRow(columnCount: number): RowBlock {
   };
 }
 
-export function createImageBlockFromAsset(asset: Asset): ImageBlock {
+export function createImageBlockFromAsset(asset: ImageAsset): ImageBlock {
   return { id: createBlockId(), type: "image", asset };
+}
+
+export function createVideoBlockFromAsset(asset: VideoAsset): VideoBlock {
+  return { id: createBlockId(), type: "video", asset };
+}
+
+/** Picks image vs video block from finalized upload metadata. */
+export function createMediaBlockFromAsset(
+  asset: Asset,
+): ImageBlock | VideoBlock {
+  if (isVideoAsset(asset)) {
+    return createVideoBlockFromAsset(asset);
+  }
+  return createImageBlockFromAsset(asset);
 }
 
 export function createRichTextBlock(): RichTextBlock {

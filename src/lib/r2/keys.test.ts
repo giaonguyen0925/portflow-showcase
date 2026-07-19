@@ -10,6 +10,9 @@ describe("R2 key builders", () => {
     expect(publicKeys.assetOriginal("asset_abc")).toBe(
       "assets/asset_abc/original.webp",
     );
+    expect(publicKeys.assetOriginal("asset_abc", "mp4")).toBe(
+      "assets/asset_abc/original.mp4",
+    );
   });
 
   it("rejects path traversal in dynamic segments", () => {

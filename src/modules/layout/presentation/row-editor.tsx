@@ -75,7 +75,7 @@ export function RowEditor({
         </div>
         <UploadDropzone
           scope={`row:${scopeId}:${row.id}`}
-          label="Upload images"
+          label="Upload media"
           onAsset={onUploadAsset}
         />
         <Button type="button" variant="outline" size="xs" onClick={onAddText}>

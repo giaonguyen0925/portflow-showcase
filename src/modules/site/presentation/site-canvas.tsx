@@ -162,12 +162,20 @@ export function SiteCanvas({
   }
 
   async function handlePublish() {
+    if (!state) return;
     setIsPublishing(true);
     try {
+      await autosave.flush(state);
       const result = await apiFetch<PublishResponse>("/api/admin/publish", {
         method: "POST",
       });
-      toast.success(`Published (${result.projectCount} projects live).`);
+      if (result.projectCount === 0) {
+        toast.warning(
+          "Published site only — no titled projects yet. Save a title on each project, then publish again.",
+        );
+      } else {
+        toast.success(`Published (${result.projectCount} projects live).`);
+      }
       onChanged();
     } catch (error) {
       toast.error(

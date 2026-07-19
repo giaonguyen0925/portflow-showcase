@@ -1,9 +1,9 @@
 import { AppError } from "@/lib/api/app-error";
 import type { Asset } from "@/modules/asset/domain/asset";
 import {
-  collectImageAssets,
+  collectMediaAssets,
   firstImageBlock,
-  MAX_IMAGE_BLOCKS_PER_PROJECT,
+  MAX_MEDIA_BLOCKS_PER_PROJECT,
 } from "@/modules/layout/domain/blocks";
 import {
   createInitialProjectIndex,
@@ -51,14 +51,14 @@ export async function saveProject(
     );
   }
 
-  const imageAssets = collectImageAssets(parsed.rows);
-  if (imageAssets.length > MAX_IMAGE_BLOCKS_PER_PROJECT) {
+  const mediaAssets = collectMediaAssets(parsed.rows);
+  if (mediaAssets.length > MAX_MEDIA_BLOCKS_PER_PROJECT) {
     throw new AppError(
       "VALIDATION_ERROR",
-      `Too many images in this project (max ${MAX_IMAGE_BLOCKS_PER_PROJECT})`,
+      `Too many media blocks in this project (max ${MAX_MEDIA_BLOCKS_PER_PROJECT})`,
     );
   }
-  assertAssetsBelongToPublicBase(imageAssets, deps.assetBaseUrl);
+  assertAssetsBelongToPublicBase(mediaAssets, deps.assetBaseUrl);
 
   const index =
     (await deps.projects.readIndex()) ?? createInitialProjectIndex();
@@ -127,23 +127,62 @@ export async function saveProject(
   await deps.projects.writeDraft(next);
 
   const cover = firstImageBlock(parsed.rows);
-  await deps.projects.writeIndex({
-    ...index,
-    revision: index.revision + 1,
-    projects: index.projects.map((p) =>
-      p.id === projectId
-        ? {
-            ...p,
-            ...titleFields,
-            summary: next.summary,
-            ...(cover === undefined
-              ? { coverAssetId: undefined }
-              : { coverAssetId: cover.asset.id }),
-            updatedAt: now,
-          }
-        : p,
-    ),
-  });
+  const coverPatch =
+    cover === undefined
+      ? ({ coverAssetId: undefined } as const)
+      : ({ coverAssetId: cover.asset.id } as const);
+
+  // Index writes are last-writer-wins and race with other autosaves/publish.
+  // Retry against a fresh read so this project's title/slug are not lost.
+  let wrote = false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const latestIndex =
+      (await deps.projects.readIndex()) ?? createInitialProjectIndex();
+    if (!latestIndex.projects.some((p) => p.id === projectId)) {
+      throw new AppError("PROJECT_NOT_FOUND", "Project is not in the index");
+    }
+
+    const baseRevision = latestIndex.revision;
+    await deps.projects.writeIndex({
+      ...latestIndex,
+      revision: baseRevision + 1,
+      projects: latestIndex.projects.map((p) => {
+        if (p.id !== projectId) {
+          return p;
+        }
+        const merged: typeof p = {
+          ...p,
+          ...titleFields,
+          summary: next.summary,
+          updatedAt: now,
+        };
+        if (coverPatch.coverAssetId === undefined) {
+          delete (merged as { coverAssetId?: string }).coverAssetId;
+        } else {
+          merged.coverAssetId = coverPatch.coverAssetId;
+        }
+        return merged;
+      }),
+    });
+
+    const verify = await deps.projects.readIndex();
+    const entry = verify?.projects.find((p) => p.id === projectId);
+    const slugOk =
+      titleFields.slug === undefined || entry?.slug === titleFields.slug;
+    const titleOk =
+      titleFields.title === undefined || entry?.title === titleFields.title;
+    if (entry && slugOk && titleOk) {
+      wrote = true;
+      break;
+    }
+  }
+
+  if (!wrote) {
+    throw new AppError(
+      "REVISION_CONFLICT",
+      "Could not update the project index. Reload and try again.",
+    );
+  }
 
   return next;
 }

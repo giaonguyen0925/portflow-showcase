@@ -3,6 +3,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 import { AppError } from "@/lib/api/app-error";
+import {
+  IMAGE_CONTENT_TYPE,
+  VIDEO_CONTENT_TYPES,
+} from "@/modules/asset/domain/asset";
 
 export const FINALIZE_TOKEN_TTL_MS = 15 * 60 * 1000;
 
@@ -14,7 +18,7 @@ const finalizeTokenPayloadSchema = z.object({
   size: z.number().int().min(1),
   width: z.number().int().min(1),
   height: z.number().int().min(1),
-  contentType: z.literal("image/webp"),
+  contentType: z.enum([IMAGE_CONTENT_TYPE, ...VIDEO_CONTENT_TYPES]),
   expiresAt: z.iso.datetime(),
 });
 
