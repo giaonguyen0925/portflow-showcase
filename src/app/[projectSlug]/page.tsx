@@ -81,7 +81,7 @@ export default async function ProjectPage(props: PageProps) {
       className={`flex flex-1 flex-col ${fontClass}`}
       style={pageThemeStyle(project.theme)}
     >
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-10 px-6 py-16">
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3 lg:gap-10 px-2 lg:px-6 py-6 lg:py-16">
         <nav>
           <Link
             href="/"

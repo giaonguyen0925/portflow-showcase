@@ -14,10 +14,11 @@ import { RichTextView } from "@/modules/rich-text/presentation/rich-text-view";
  * nothing.
  */
 
+/** Keep the authored column count at every viewport (WYSIWYG; columns shrink). */
 export function columnGridClass(columnCount: number): string {
   if (columnCount <= 1) return "grid-cols-1";
-  if (columnCount === 2) return "grid-cols-1 sm:grid-cols-2";
-  return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+  if (columnCount === 2) return "grid-cols-2";
+  return "grid-cols-3";
 }
 
 export type RenderBlock = (block: Block) => ReactNode | undefined;
