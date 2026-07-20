@@ -99,6 +99,21 @@ export function RowsCanvas({
                 ),
               )
             }
+            onUpdateImageCrop={(columnId, blockId, crop) =>
+              onRowsChange(
+                updateBlockInColumn(rows, index, columnId, blockId, (block) => {
+                  if (block.type !== "image") return block;
+                  if (crop === undefined) {
+                    return {
+                      id: block.id,
+                      type: "image",
+                      asset: block.asset,
+                    };
+                  }
+                  return { ...block, crop };
+                }),
+              )
+            }
             onRemoveBlock={(columnId, blockId) =>
               onRowsChange(removeBlockFromColumn(rows, index, columnId, blockId))
             }

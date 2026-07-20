@@ -5,6 +5,7 @@ import {
   videoAssetSchema,
   type Asset,
 } from "@/modules/asset/domain/asset";
+import { imageCropSchema } from "@/modules/layout/domain/image-crop";
 import { richTextDocumentSchema } from "@/modules/rich-text/domain/rich-text-document";
 
 export const MIN_COLUMNS = 1;
@@ -30,6 +31,8 @@ export const imageBlockSchema = z.object({
   id: blockIdSchema,
   type: z.literal("image"),
   asset: imageAssetSchema,
+  /** Focal cover crop; omitted means centered cover (ADR-0004). */
+  crop: imageCropSchema.optional(),
 });
 
 export type ImageBlock = z.infer<typeof imageBlockSchema>;

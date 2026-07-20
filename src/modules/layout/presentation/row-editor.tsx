@@ -9,6 +9,10 @@ import {
   type RowBlock,
 } from "@/modules/layout/domain/blocks";
 import {
+  rowMediaAspectRatio,
+  type ImageCrop,
+} from "@/modules/layout/domain/image-crop";
+import {
   ColumnEditor,
   type RenderBlockEditor,
 } from "@/modules/layout/presentation/column-editor";
@@ -28,6 +32,7 @@ export function RowEditor({
   onAddTextToColumn,
   onUploadToColumn,
   onUpdateRichText,
+  onUpdateImageCrop,
   onRemoveBlock,
   renderBlockEditor,
 }: {
@@ -47,9 +52,16 @@ export function RowEditor({
     blockId: string,
     content: RichTextDocument,
   ) => void;
+  onUpdateImageCrop: (
+    columnId: string,
+    blockId: string,
+    crop: ImageCrop | undefined,
+  ) => void;
   onRemoveBlock: (columnId: string, blockId: string) => void;
   renderBlockEditor?: RenderBlockEditor | undefined;
 }) {
+  const mediaAspect = rowMediaAspectRatio(row);
+
   return (
     <div className="group rounded-xl border border-transparent p-2 hover:border-border">
       <div className="mb-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
@@ -111,10 +123,14 @@ export function RowEditor({
             column={column}
             scopeId={scopeId}
             rowId={row.id}
+            mediaAspect={mediaAspect}
             onAddText={() => onAddTextToColumn(column.id)}
             onUpload={(asset) => onUploadToColumn(column.id, asset)}
             onUpdateRichText={(blockId, content) =>
               onUpdateRichText(column.id, blockId, content)
+            }
+            onUpdateImageCrop={(blockId, crop) =>
+              onUpdateImageCrop(column.id, blockId, crop)
             }
             onRemoveBlock={(blockId) => onRemoveBlock(column.id, blockId)}
             renderBlockEditor={renderBlockEditor}

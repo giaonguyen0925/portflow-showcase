@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 
 import type { Block, RowBlock } from "@/modules/layout/domain/blocks";
+import { rowMediaAspectRatio } from "@/modules/layout/domain/image-crop";
+import {
+  ImageMediaView,
+  VideoMediaView,
+} from "@/modules/layout/presentation/image-media-view";
 import { RichTextView } from "@/modules/rich-text/presentation/rich-text-view";
 
 /**
@@ -32,56 +37,53 @@ export function RowsView({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      {rows.map((row) => (
-        <div
-          key={row.id}
-          className={`grid items-start gap-4 ${columnGridClass(row.columns.length)}`}
-        >
-          {row.columns.map((column) => (
-            <div key={column.id} className="flex flex-col gap-3">
-              {column.blocks.map((block) => (
-                <BlockView key={block.id} block={block} renderBlock={renderBlock} />
-              ))}
-            </div>
-          ))}
-        </div>
-      ))}
+      {rows.map((row) => {
+        const mediaAspect = rowMediaAspectRatio(row);
+        return (
+          <div
+            key={row.id}
+            className={`grid items-start gap-4 ${columnGridClass(row.columns.length)}`}
+          >
+            {row.columns.map((column) => (
+              <div key={column.id} className="flex flex-col gap-3">
+                {column.blocks.map((block) => (
+                  <BlockView
+                    key={block.id}
+                    block={block}
+                    mediaAspect={mediaAspect}
+                    renderBlock={renderBlock}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function BlockView({
   block,
+  mediaAspect,
   renderBlock,
 }: {
   block: Block;
+  mediaAspect: number | undefined;
   renderBlock?: RenderBlock | undefined;
 }) {
   if (block.type === "image") {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- R2-hosted asset, no crop (ARD §10)
-      <img
-        src={block.asset.url}
-        alt={block.asset.alt}
-        width={block.asset.width}
-        height={block.asset.height}
-        loading="lazy"
-        className="h-auto w-full"
+      <ImageMediaView
+        asset={block.asset}
+        crop={block.crop}
+        aspectRatio={mediaAspect}
       />
     );
   }
   if (block.type === "video") {
     return (
-      <video
-        src={block.asset.url}
-        width={block.asset.width}
-        height={block.asset.height}
-        controls
-        playsInline
-        preload="metadata"
-        className="h-auto w-full"
-        aria-label={block.asset.alt || undefined}
-      />
+      <VideoMediaView asset={block.asset} aspectRatio={mediaAspect} />
     );
   }
   if (block.type === "rich-text") {

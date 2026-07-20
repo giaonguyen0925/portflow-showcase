@@ -1,11 +1,17 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { Asset } from "@/modules/asset/domain/asset";
 import { UploadDropzone } from "@/modules/asset/presentation/upload-dropzone";
-import type { Block, ColumnBlock } from "@/modules/layout/domain/blocks";
+import type { Block, ColumnBlock, ImageBlock } from "@/modules/layout/domain/blocks";
+import type { ImageCrop } from "@/modules/layout/domain/image-crop";
+import { ImageCropDialog } from "@/modules/layout/presentation/image-crop-dialog";
+import {
+  ImageMediaView,
+  VideoMediaView,
+} from "@/modules/layout/presentation/image-media-view";
 import { RichTextEditor } from "@/modules/rich-text/presentation/rich-text-editor";
 import type { RichTextDocument } from "@/modules/rich-text/domain/rich-text-document";
 
@@ -16,18 +22,23 @@ export function ColumnEditor({
   column,
   scopeId,
   rowId,
+  mediaAspect,
   onAddText,
   onUpload,
   onUpdateRichText,
+  onUpdateImageCrop,
   onRemoveBlock,
   renderBlockEditor,
 }: {
   column: ColumnBlock;
   scopeId: string;
   rowId: string;
+  /** Shared row media frame (width/height); undefined until the row has media. */
+  mediaAspect: number | undefined;
   onAddText: () => void;
   onUpload: (asset: Asset) => void;
   onUpdateRichText: (blockId: string, content: RichTextDocument) => void;
+  onUpdateImageCrop: (blockId: string, crop: ImageCrop | undefined) => void;
   onRemoveBlock: (blockId: string) => void;
   renderBlockEditor?: RenderBlockEditor | undefined;
 }) {
@@ -53,55 +64,94 @@ export function ColumnEditor({
         <div key={block.id} className="group/block relative">
           <BlockEditor
             block={block}
+            mediaAspect={mediaAspect}
             onUpdateRichText={onUpdateRichText}
             renderBlockEditor={renderBlockEditor}
           />
-          <Button
-            type="button"
-            variant="destructive"
-            size="xs"
-            className="absolute top-1 right-1 z-10 opacity-0 group-hover/block:opacity-100"
-            onClick={() => onRemoveBlock(block.id)}
-          >
-            Remove
-          </Button>
+          <div className="absolute top-1 right-1 z-10 flex gap-1 opacity-0 transition-opacity group-hover/block:opacity-100 focus-within:opacity-100">
+            {block.type === "image" ? (
+              <ImageCropButton
+                block={block}
+                mediaAspect={mediaAspect}
+                onSave={(crop) => onUpdateImageCrop(block.id, crop)}
+              />
+            ) : null}
+            <Button
+              type="button"
+              variant="destructive"
+              size="xs"
+              onClick={() => onRemoveBlock(block.id)}
+            >
+              Remove
+            </Button>
+          </div>
         </div>
       ))}
     </div>
   );
 }
 
+function ImageCropButton({
+  block,
+  mediaAspect,
+  onSave,
+}: {
+  block: ImageBlock;
+  mediaAspect: number | undefined;
+  onSave: (crop: ImageCrop | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const aspectRatio = mediaAspect ?? block.asset.width / block.asset.height;
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="secondary"
+        size="xs"
+        onClick={() => setOpen(true)}
+      >
+        Crop
+      </Button>
+      <ImageCropDialog
+        open={open}
+        onOpenChange={setOpen}
+        asset={block.asset}
+        aspectRatio={aspectRatio}
+        initialCrop={block.crop}
+        onSave={onSave}
+      />
+    </>
+  );
+}
+
 function BlockEditor({
   block,
+  mediaAspect,
   onUpdateRichText,
   renderBlockEditor,
 }: {
   block: Block;
+  mediaAspect: number | undefined;
   onUpdateRichText: (blockId: string, content: RichTextDocument) => void;
   renderBlockEditor?: RenderBlockEditor | undefined;
 }) {
   if (block.type === "image") {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- R2 asset preview, kept at intrinsic ratio (ARD §10)
-      <img
-        src={block.asset.url}
-        alt={block.asset.alt}
-        width={block.asset.width}
-        height={block.asset.height}
-        className="h-auto w-full rounded-md bg-muted"
+      <ImageMediaView
+        asset={block.asset}
+        crop={block.crop}
+        aspectRatio={mediaAspect}
+        className="rounded-md bg-muted"
       />
     );
   }
   if (block.type === "video") {
     return (
-      <video
-        src={block.asset.url}
-        width={block.asset.width}
-        height={block.asset.height}
-        controls
-        playsInline
-        preload="metadata"
-        className="h-auto w-full rounded-md bg-muted"
+      <VideoMediaView
+        asset={block.asset}
+        aspectRatio={mediaAspect}
+        className="rounded-md bg-muted"
       />
     );
   }
